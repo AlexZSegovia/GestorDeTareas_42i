@@ -1,0 +1,80 @@
+{
+  "name": "Tasks - Delete (POST /tasks/:id/delete)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "tasks/:id/delete",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "WebhookDelete",
+      "name": "Webhook Delete",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [120, 200]
+    },
+    {
+      "parameters": {
+        "operation": "delete",
+        "tableId": "tasks",
+        "filters": {
+          "conditions": [
+            { "keyName": "id", "condition": "eq", "keyValue": "={{$json.params.id}}" }
+          ]
+        }
+      },
+      "id": "SupabaseDelete",
+      "name": "Supabase Delete Task",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [380, 200],
+      "credentials": {
+        "supabaseApi": {
+          "id": "BlAd6dilFMdntYLG",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{ json: { statusCode: 204, body: {} } }];"
+      },
+      "id": "BuildResponse",
+      "name": "Build Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [640, 200]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{$json.body}}",
+        "options": {
+          "responseCode": "={{$json.statusCode}}",
+          "responseHeaders": {
+            "entries": [
+              { "name": "Access-Control-Allow-Origin", "value": "*" },
+              { "name": "Access-Control-Allow-Methods", "value": "GET,POST,OPTIONS" },
+              { "name": "Access-Control-Allow-Headers", "value": "Content-Type,Authorization" }
+            ]
+          }
+        }
+      },
+      "id": "Respond",
+      "name": "Respond",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.3,
+      "position": [900, 200]
+    }
+  ],
+  "connections": {
+    "Webhook Delete": { "main": [[{ "node": "Supabase Delete Task", "type": "main", "index": 0 }]] },
+    "Supabase Delete Task": { "main": [[{ "node": "Build Response", "type": "main", "index": 0 }]] },
+    "Build Response": { "main": [[{ "node": "Respond", "type": "main", "index": 0 }]] }
+  },
+  "active": false,
+  "settings": { "executionOrder": "v1" },
+  "meta": { "templateCredsSetupCompleted": true },
+  "tags": []
+}

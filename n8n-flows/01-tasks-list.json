@@ -1,0 +1,76 @@
+{
+  "name": "Tasks - List (GET /tasks)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "tasks",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "WebhookList",
+      "name": "Webhook List",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [120, 200]
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "tableId": "tasks",
+        "returnAll": true
+      },
+      "id": "SupabaseGetAll",
+      "name": "Supabase GetAll Tasks",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [380, 200],
+      "credentials": {
+        "supabaseApi": {
+          "id": "BlAd6dilFMdntYLG",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const all = $input.all().map(i => i.json);\nconst q = $items('Webhook List', 0, 0)[0]?.json?.query ?? {};\n\nconst toNull = (v) => (v === undefined || v === null || v === '' ? null : v);\nconst status = toNull(q.status);\nconst priority = toNull(q.priority);\nconst search = toNull(q.search);\nconst sort = ['created_at','priority','status','title'].includes(String(q.sort || '')) ? String(q.sort) : 'created_at';\nconst order = String(q.order || 'desc').toLowerCase() === 'asc' ? 'asc' : 'desc';\n\nlet filtered = all;\nif (status) filtered = filtered.filter(t => t.status === status);\nif (priority) filtered = filtered.filter(t => t.priority === priority);\nif (search) filtered = filtered.filter(t => String(t.title || '').toLowerCase().includes(String(search).toLowerCase()));\n\nconst childCount = new Map();\nfor (const t of filtered) {\n  if (t.parent_id) childCount.set(t.parent_id, (childCount.get(t.parent_id) || 0) + 1);\n}\n\nlet roots = filtered\n  .filter(t => t.parent_id === null)\n  .map(t => ({ ...t, subtask_count: childCount.get(t.id) || 0 }));\n\nconst priorityRank = { low: 1, medium: 2, high: 3, urgent: 4 };\nroots.sort((a, b) => {\n  let av = a[sort];\n  let bv = b[sort];\n  if (sort === 'priority') { av = priorityRank[a.priority] ?? 0; bv = priorityRank[b.priority] ?? 0; }\n  if (sort === 'created_at') { av = new Date(a.created_at).getTime(); bv = new Date(b.created_at).getTime(); }\n  if (av < bv) return order === 'asc' ? -1 : 1;\n  if (av > bv) return order === 'asc' ? 1 : -1;\n  return 0;\n});\n\nconst est = (v) => (v == null ? 0 : Number(v));\nconst stats = {\n  todo_count: filtered.filter(t => t.status === 'todo').length,\n  in_progress_count: filtered.filter(t => t.status === 'in_progress').length,\n  done_count: filtered.filter(t => t.status === 'done').length,\n  total_estimate: filtered.reduce((a,t) => a + est(t.estimate), 0),\n  todo_estimate: filtered.filter(t => t.status === 'todo').reduce((a,t) => a + est(t.estimate), 0),\n  in_progress_estimate: filtered.filter(t => t.status === 'in_progress').reduce((a,t) => a + est(t.estimate), 0),\n};\n\nreturn [{ json: { statusCode: 200, body: { data: roots, total: roots.length, stats } } }];"
+      },
+      "id": "BuildResponse",
+      "name": "Build Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [640, 200]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{$json.body}}",
+        "options": {
+          "responseCode": "={{$json.statusCode}}",
+          "responseHeaders": {
+            "entries": [
+              { "name": "Access-Control-Allow-Origin", "value": "*" },
+              { "name": "Access-Control-Allow-Methods", "value": "GET,POST,OPTIONS" },
+              { "name": "Access-Control-Allow-Headers", "value": "Content-Type,Authorization" }
+            ]
+          }
+        }
+      },
+      "id": "Respond",
+      "name": "Respond",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.3,
+      "position": [900, 200]
+    }
+  ],
+  "connections": {
+    "Webhook List": { "main": [[{ "node": "Supabase GetAll Tasks", "type": "main", "index": 0 }]] },
+    "Supabase GetAll Tasks": { "main": [[{ "node": "Build Response", "type": "main", "index": 0 }]] },
+    "Build Response": { "main": [[{ "node": "Respond", "type": "main", "index": 0 }]] }
+  },
+  "active": false,
+  "settings": { "executionOrder": "v1" },
+  "meta": { "templateCredsSetupCompleted": true },
+  "tags": []
+}

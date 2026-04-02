@@ -1,0 +1,118 @@
+{
+  "name": "Tasks - Create (POST /tasks)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "tasks",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "WebhookCreate",
+      "name": "Webhook Create",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [120, 200]
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $json.body ?? {};\nconst statuses = ['todo','in_progress','done'];\nconst priorities = ['low','medium','high','urgent'];\n\nif (!body.title || String(body.title).trim() === '') {\n  return [{ json: { statusCode: 400, body: { message: 'title is required' }, _stop: true } }];\n}\n\nconst estimate = (body.estimate === undefined || body.estimate === null || body.estimate === '') ? null : Number(body.estimate);\nif (estimate !== null && (Number.isNaN(estimate) || estimate < 0)) {\n  return [{ json: { statusCode: 400, body: { message: 'estimate must be a non-negative number' }, _stop: true } }];\n}\n\nreturn [{\n  json: {\n    _stop: false,\n    title: String(body.title).trim().slice(0, 200),\n    description: body.description ?? null,\n    status: statuses.includes(body.status) ? body.status : 'todo',\n    priority: priorities.includes(body.priority) ? body.priority : 'medium',\n    estimate,\n    parent_id: body.parent_id ?? null\n  }\n}];"
+      },
+      "id": "PreparePayload",
+      "name": "Prepare Payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [360, 200]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            { "value1": "={{$json._stop}}", "operation": "isTrue" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "IfInvalid",
+      "name": "IF Invalid",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [580, 200]
+    },
+    {
+      "parameters": {
+        "operation": "create",
+        "tableId": "tasks",
+        "columns": "title,description,status,priority,estimate,parent_id",
+        "additionalFields": {
+          "values": {
+            "title": "={{$json.title}}",
+            "description": "={{$json.description}}",
+            "status": "={{$json.status}}",
+            "priority": "={{$json.priority}}",
+            "estimate": "={{$json.estimate}}",
+            "parent_id": "={{$json.parent_id}}"
+          }
+        }
+      },
+      "id": "SupabaseCreate",
+      "name": "Supabase Create Task",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [800, 260],
+      "credentials": {
+        "supabaseApi": {
+          "id": "BlAd6dilFMdntYLG",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{ json: { statusCode: 201, body: $json } }];"
+      },
+      "id": "BuildOk",
+      "name": "Build OK",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1020, 260]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{$json.body}}",
+        "options": {
+          "responseCode": "={{$json.statusCode}}",
+          "responseHeaders": {
+            "entries": [
+              { "name": "Access-Control-Allow-Origin", "value": "*" },
+              { "name": "Access-Control-Allow-Methods", "value": "GET,POST,OPTIONS" },
+              { "name": "Access-Control-Allow-Headers", "value": "Content-Type,Authorization" }
+            ]
+          }
+        }
+      },
+      "id": "Respond",
+      "name": "Respond",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.3,
+      "position": [1240, 200]
+    }
+  ],
+  "connections": {
+    "Webhook Create": { "main": [[{ "node": "Prepare Payload", "type": "main", "index": 0 }]] },
+    "Prepare Payload": { "main": [[{ "node": "IF Invalid", "type": "main", "index": 0 }]] },
+    "IF Invalid": {
+      "main": [
+        [{ "node": "Respond", "type": "main", "index": 0 }],
+        [{ "node": "Supabase Create Task", "type": "main", "index": 0 }]
+      ]
+    },
+    "Supabase Create Task": { "main": [[{ "node": "Build OK", "type": "main", "index": 0 }]] },
+    "Build OK": { "main": [[{ "node": "Respond", "type": "main", "index": 0 }]] }
+  },
+  "active": false,
+  "settings": { "executionOrder": "v1" },
+  "meta": { "templateCredsSetupCompleted": true },
+  "tags": []
+}

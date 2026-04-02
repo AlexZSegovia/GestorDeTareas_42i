@@ -1,0 +1,76 @@
+{
+  "name": "Tasks - Detail (GET /tasks/:id)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "tasks/:id",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "WebhookDetail",
+      "name": "Webhook Detail",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [120, 200]
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "tableId": "tasks",
+        "returnAll": true
+      },
+      "id": "SupabaseGetAll",
+      "name": "Supabase GetAll Tasks",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [380, 200],
+      "credentials": {
+        "supabaseApi": {
+          "id": "BlAd6dilFMdntYLG",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const all = $input.all().map(i => i.json);\nconst taskId = $items('Webhook Detail', 0, 0)[0]?.json?.params?.id;\n\nif (!taskId) return [{ json: { statusCode: 400, body: { message: 'id is required' } } }];\n\nconst byParent = new Map();\nfor (const t of all) {\n  const p = t.parent_id ?? '__ROOT__';\n  if (!byParent.has(p)) byParent.set(p, []);\n  byParent.get(p).push({ ...t });\n}\n\nconst root = all.find(t => t.id === taskId);\nif (!root) return [{ json: { statusCode: 404, body: { message: 'Task not found' } } }];\n\nconst build = (node) => ({ ...node, subtasks: (byParent.get(node.id) || []).map(build) });\nreturn [{ json: { statusCode: 200, body: build(root) } }];"
+      },
+      "id": "BuildResponse",
+      "name": "Build Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [640, 200]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{$json.body}}",
+        "options": {
+          "responseCode": "={{$json.statusCode}}",
+          "responseHeaders": {
+            "entries": [
+              { "name": "Access-Control-Allow-Origin", "value": "*" },
+              { "name": "Access-Control-Allow-Methods", "value": "GET,POST,OPTIONS" },
+              { "name": "Access-Control-Allow-Headers", "value": "Content-Type,Authorization" }
+            ]
+          }
+        }
+      },
+      "id": "Respond",
+      "name": "Respond",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.3,
+      "position": [900, 200]
+    }
+  ],
+  "connections": {
+    "Webhook Detail": { "main": [[{ "node": "Supabase GetAll Tasks", "type": "main", "index": 0 }]] },
+    "Supabase GetAll Tasks": { "main": [[{ "node": "Build Response", "type": "main", "index": 0 }]] },
+    "Build Response": { "main": [[{ "node": "Respond", "type": "main", "index": 0 }]] }
+  },
+  "active": false,
+  "settings": { "executionOrder": "v1" },
+  "meta": { "templateCredsSetupCompleted": true },
+  "tags": []
+}

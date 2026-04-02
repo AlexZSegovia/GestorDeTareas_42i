@@ -1,0 +1,124 @@
+{
+  "name": "Tasks - Update (POST /tasks/:id/update)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "tasks/:id/update",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "WebhookUpdate",
+      "name": "Webhook Update",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [120, 200]
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $json.body ?? {};\nconst taskId = $json.params?.id;\nconst statuses = ['todo','in_progress','done'];\nconst priorities = ['low','medium','high','urgent'];\n\nif (!taskId) return [{ json: { statusCode: 400, body: { message: 'id is required' }, _stop: true } }];\n\nconst patch = {};\nif (body.title !== undefined) patch.title = String(body.title).trim().slice(0, 200);\nif (body.description !== undefined) patch.description = body.description ?? null;\nif (body.status !== undefined) {\n  if (!statuses.includes(body.status)) return [{ json: { statusCode: 400, body: { message: 'invalid status' }, _stop: true } }];\n  patch.status = body.status;\n}\nif (body.priority !== undefined) {\n  if (!priorities.includes(body.priority)) return [{ json: { statusCode: 400, body: { message: 'invalid priority' }, _stop: true } }];\n  patch.priority = body.priority;\n}\nif (body.estimate !== undefined) {\n  if (body.estimate === null || body.estimate === '') patch.estimate = null;\n  else {\n    const n = Number(body.estimate);\n    if (Number.isNaN(n) || n < 0) return [{ json: { statusCode: 400, body: { message: 'estimate must be a non-negative number' }, _stop: true } }];\n    patch.estimate = n;\n  }\n}\nif (body.parent_id !== undefined) patch.parent_id = body.parent_id ?? null;\n\nif (Object.keys(patch).length === 0) return [{ json: { statusCode: 400, body: { message: 'empty patch' }, _stop: true } }];\n\nreturn [{ json: { _stop: false, taskId, patch } }];"
+      },
+      "id": "PreparePayload",
+      "name": "Prepare Payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [360, 200]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            { "value1": "={{$json._stop}}", "operation": "isTrue" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "IfInvalid",
+      "name": "IF Invalid",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [580, 200]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "tableId": "tasks",
+        "matchType": "allFilters",
+        "filters": {
+          "conditions": [
+            { "keyName": "id", "condition": "eq", "keyValue": "={{$json.taskId}}" }
+          ]
+        },
+        "columns": "title,description,status,priority,estimate,parent_id",
+        "additionalFields": {
+          "values": {
+            "title": "={{$json.patch.title}}",
+            "description": "={{$json.patch.description}}",
+            "status": "={{$json.patch.status}}",
+            "priority": "={{$json.patch.priority}}",
+            "estimate": "={{$json.patch.estimate}}",
+            "parent_id": "={{$json.patch.parent_id}}"
+          }
+        }
+      },
+      "id": "SupabaseUpdate",
+      "name": "Supabase Update Task",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [800, 260],
+      "credentials": {
+        "supabaseApi": {
+          "id": "BlAd6dilFMdntYLG",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "if (!$json || !$json.id) return [{ json: { statusCode: 404, body: { message: 'Task not found' } } }];\nreturn [{ json: { statusCode: 200, body: $json } }];"
+      },
+      "id": "BuildOk",
+      "name": "Build OK",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1020, 260]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{$json.body}}",
+        "options": {
+          "responseCode": "={{$json.statusCode}}",
+          "responseHeaders": {
+            "entries": [
+              { "name": "Access-Control-Allow-Origin", "value": "*" },
+              { "name": "Access-Control-Allow-Methods", "value": "GET,POST,OPTIONS" },
+              { "name": "Access-Control-Allow-Headers", "value": "Content-Type,Authorization" }
+            ]
+          }
+        }
+      },
+      "id": "Respond",
+      "name": "Respond",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.3,
+      "position": [1240, 200]
+    }
+  ],
+  "connections": {
+    "Webhook Update": { "main": [[{ "node": "Prepare Payload", "type": "main", "index": 0 }]] },
+    "Prepare Payload": { "main": [[{ "node": "IF Invalid", "type": "main", "index": 0 }]] },
+    "IF Invalid": {
+      "main": [
+        [{ "node": "Respond", "type": "main", "index": 0 }],
+        [{ "node": "Supabase Update Task", "type": "main", "index": 0 }]
+      ]
+    },
+    "Supabase Update Task": { "main": [[{ "node": "Build OK", "type": "main", "index": 0 }]] },
+    "Build OK": { "main": [[{ "node": "Respond", "type": "main", "index": 0 }]] }
+  },
+  "active": false,
+  "settings": { "executionOrder": "v1" },
+  "meta": { "templateCredsSetupCompleted": true },
+  "tags": []
+}
